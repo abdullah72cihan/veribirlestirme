@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Pro: Veri Birleştirme ve Eşleştirme</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS Kütüphanesi -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .drag-active { border-style: solid; background-color: #eff6ff; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        select[multiple] {
+            background-image: none;
+            padding: 0.5rem;
+        }
+        select[multiple] option {
+            padding: 6px 10px;
+            border-radius: 6px;
+            margin-bottom: 2px;
+            transition: background-color 0.1s;
+        }
+        select[multiple] option:checked {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 600;
+            border-left: 3px solid #3b82f6;
+        }
+        /* Fade in animation */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="container mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-lg shadow-indigo-200 shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-800 leading-tight">Excel Veri Birleştirici</h1>
+                    <p class="text-xs text-slate-500">İki dosyayı eşleştirin, verileri aktarın.</p>
+                </div>
+            </div>
+            <div class="text-xs font-medium bg-slate-100 px-3 py-1 rounded-full text-slate-600 border border-slate-200">
+                v3.3 Pro
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-7xl">
+        
+        <!-- STEP 1: DOSYA YÜKLEME -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+            
+            <button id="swap-files-btn" class="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 bg-white border border-slate-300 p-2 rounded-full shadow-md hover:bg-slate-50 hover:text-blue-600 transition-colors hidden md:block" title="Dosyaların yerini değiştir">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+            </button>
+
+            <!-- SOL: KAYNAK DOSYA -->
+            <div class="flex flex-col h-full">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded tracking-wider">KAYNAK</span>
+                    <h2 class="text-sm font-semibold text-slate-700">Veri Tabanı Dosyası</h2>
+                </div>
+                
+                <div id="drop-zone-source" class="flex-grow bg-white border-2 border-dashed border-blue-200 rounded-xl p-6 text-center transition-all cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 group relative min-h-[160px] flex flex-col justify-center items-center shadow-sm">
+                    <input type="file" id="sourceInput" class="hidden" accept=".xlsx, .xls, .csv" />
+                    
+                    <div id="source-empty-state">
+                        <div class="bg-blue-50 p-3 rounded-full inline-block mb-3 group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
+                            </svg>
+                        </div>
+                        <p class="text-sm font-medium text-slate-600">Kaynak Excel'i buraya bırakın</p>
+                    </div>
+
+                    <div id="source-file-info" class="hidden w-full">
+                        <div class="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100 text-left">
+                            <div class="truncate pr-2">
+                                <div class="text-[10px] text-blue-500 font-bold uppercase tracking-wider">Dosya Yüklendi</div>
+                                <div id="source-filename" class="text-sm font-semibold text-blue-900 truncate">dosya.xlsx</div>
+                            </div>
+                            <button id="remove-source" class="text-blue-400 hover:text-red-500 p-1 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAĞ: HEDEF DOSYA -->
+            <div class="flex flex-col h-full">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded tracking-wider">HEDEF</span>
+                    <h2 class="text-sm font-semibold text-slate-700">İşlenecek Dosya</h2>
+                </div>
+                
+                <div id="drop-zone-target" class="flex-grow bg-white border-2 border-dashed border-orange-200 rounded-xl p-6 text-center transition-all cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 group relative min-h-[160px] flex flex-col justify-center items-center shadow-sm">
+                    <input type="file" id="targetInput" class="hidden" accept=".xlsx, .xls, .csv" />
+                    
+                    <div id="target-empty-state">
+                        <div class="bg-orange-50 p-3 rounded-full inline-block mb-3 group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <p class="text-sm font-medium text-slate-600">Hedef Excel'i buraya bırakın</p>
+                    </div>
+
+                    <div id="target-file-info" class="hidden w-full">
+                        <div class="flex items-center justify-between bg-orange-50 p-3 rounded-lg border border-orange-100 text-left">
+                            <div class="truncate pr-2">
+                                <div class="text-[10px] text-orange-500 font-bold uppercase tracking-wider">Dosya Yüklendi</div>
+                                <div id="target-filename" class="text-sm font-semibold text-orange-900 truncate">dosya.xlsx</div>
+                            </div>
+                            <button id="remove-target" class="text-orange-400 hover:text-red-500 p-1 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Örnek Veri Butonu -->
+        <div class="text-center mt-4">
+            <button id="example-btn" class="text-xs text-slate-400 hover:text-indigo-600 underline transition-colors">
+                ✨ Denemek için örnek veriler oluştur
+            </button>
+        </div>
+
+        <!-- STEP 2: KONFİGÜRASYON PANELİ -->
+        <div id="config-panel" class="hidden mt-8 space-y-8 animate-fade-in">
+            
+            <!-- 1. Bölüm: Eşleştirme -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-purple-500"></div>
+
+                <div class="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+                    <div class="bg-indigo-100 text-indigo-700 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ring-4 ring-indigo-50">1</div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800">Ortak Sütunları Eşleştirin (Bağlantı Kurma)</h3>
+                        <p class="text-xs text-slate-500 mt-1">İki dosyayı birleştirmek için ortak veriyi (Örn: Ürün Kodu) seçin.</p>
+                    </div>
+                    <div class="ml-auto flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                         <input type="checkbox" id="exact-match" checked class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                         <label for="exact-match" class="text-sm font-medium text-slate-600 cursor-pointer">Tam Eşleşme</label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-7 gap-6 items-start">
+                    <!-- Kaynak -->
+                    <div class="md:col-span-3 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <label class="flex items-center gap-2 text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">
+                            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                            Kaynak Ortak Sütun
+                        </label>
+                        <select id="source-key-col" class="w-full bg-white border border-blue-200 text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500 shadow-sm outline-none"></select>
+                        <div class="mt-2 flex items-center gap-2 text-xs text-slate-500 bg-white/50 p-2 rounded border border-slate-100">
+                            <span class="font-bold text-blue-600">Örnek:</span>
+                            <span id="source-preview-val" class="font-mono bg-slate-100 px-1 rounded text-slate-700">--</span>
+                        </div>
+                    </div>
+
+                    <!-- İkon -->
+                    <div class="md:col-span-1 flex flex-col justify-center items-center py-4 md:py-8 text-slate-400 gap-1">
+                        <div class="text-[10px] font-semibold uppercase tracking-wider">Eşittir</div>
+                        <div class="bg-white p-2 rounded-full shadow-sm border border-slate-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Hedef -->
+                    <div class="md:col-span-3 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                        <label class="flex items-center gap-2 text-xs font-bold text-orange-700 mb-2 uppercase tracking-wide">
+                            <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+                            Hedef Ortak Sütun
+                        </label>
+                        <select id="target-key-col" class="w-full bg-white border border-orange-200 text-sm rounded-lg p-2.5 focus:ring-orange-500 focus:border-orange-500 shadow-sm outline-none"></select>
+                        <div class="mt-2 flex items-center gap-2 text-xs text-slate-500 bg-white/50 p-2 rounded border border-slate-100">
+                            <span class="font-bold text-orange-600">Örnek:</span>
+                            <span id="target-preview-val" class="font-mono bg-slate-100 px-1 rounded text-slate-700">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Bölüm: Mapping (YENİLİK: Filtreleme ve Tarih Seçeneği) -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div class="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+                    <div class="bg-indigo-100 text-indigo-700 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ring-4 ring-indigo-50">2</div>
+                    <div class="flex-grow">
+                        <h3 class="text-lg font-bold text-slate-800">Veri Transfer Ayarları</h3>
+                        <p class="text-xs text-slate-500">Hangi verilerin nereye aktarılacağını seçin.</p>
+                    </div>
+                    
+                    <!-- YENİ: Tarih Düzeltme Checkbox -->
+                    <div class="mr-4 flex items-center gap-2 bg-yellow-50 px-3 py-1.5 rounded-lg border border-yellow-200">
+                         <input type="checkbox" id="fix-dates" class="w-4 h-4 text-yellow-600 rounded border-slate-300 focus:ring-yellow-500">
+                         <label for="fix-dates" class="text-xs font-bold text-yellow-800 cursor-pointer flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Sayısal Tarihleri Düzelt (44920 ➔ 25.12.2022)
+                         </label>
+                    </div>
+
+                    <div id="col-count-badge" class="hidden bg-slate-100 px-3 py-1 rounded-full text-xs font-medium">
+                        <span id="source-count">0</span> Kaynak ➔ <span id="target-count">0</span> Hedef
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+                    
+                    <!-- Kaynak Veri Sütunları -->
+                    <div class="md:col-span-3 flex flex-col h-full">
+                        <label class="block text-xs font-bold text-blue-700 mb-2 uppercase tracking-wide">
+                            Alınacak Veriler (Çoklu Seçim)
+                        </label>
+                        <!-- YENİ: Arama Kutusu -->
+                        <div class="relative mb-2">
+                            <input type="text" id="filter-source" placeholder="Sütun ara..." class="w-full text-xs p-2 pl-7 border border-blue-200 rounded-lg focus:outline-none focus:border-blue-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 absolute left-2 top-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <div class="flex-grow relative">
+                            <select id="source-value-cols" multiple class="w-full h-48 bg-blue-50/30 border border-blue-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 custom-scrollbar outline-none"></select>
+                            <div class="absolute bottom-2 right-2 text-[10px] bg-white/90 px-2 py-1 rounded text-slate-500 pointer-events-none shadow-sm border border-slate-100">
+                                Ctrl (Win) / Cmd (Mac) ile çoklu
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Yön İkonu -->
+                    <div class="md:col-span-1 flex flex-col justify-center items-center gap-2 py-4 md:py-0">
+                        <div class="text-xs font-medium text-slate-400 text-center">Aktar</div>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-indigo-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        <div id="mapping-error" class="hidden text-[10px] text-red-600 font-bold text-center bg-red-50 px-2 py-1 rounded border border-red-100">
+                            Eşit sayıda seçmelisiniz!
+                        </div>
+                    </div>
+
+                    <!-- Hedef Yazılacak Sütunlar -->
+                    <div class="md:col-span-3 flex flex-col h-full">
+                        <label class="block text-xs font-bold text-orange-700 mb-2 uppercase tracking-wide">
+                            Yazılacak Yerler (Çoklu Seçim)
+                        </label>
+                        <!-- YENİ: Arama Kutusu -->
+                        <div class="relative mb-2">
+                            <input type="text" id="filter-target" placeholder="Sütun ara..." class="w-full text-xs p-2 pl-7 border border-orange-200 rounded-lg focus:outline-none focus:border-orange-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 absolute left-2 top-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <div class="flex-grow relative">
+                            <select id="target-dest-cols" multiple class="w-full h-48 bg-orange-50/30 border border-orange-200 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 custom-scrollbar outline-none"></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aksiyon Butonu -->
+            <div class="flex justify-end pb-4">
+                <button id="process-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center gap-3 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span class="text-lg">Önizle ve Kontrol Et</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 3: ÖNİZLEME PANELİ -->
+        <div id="result-panel" class="hidden mt-8 bg-white rounded-xl shadow-lg border border-slate-200 p-6 animate-fade-in border-t-4 border-t-green-500 mb-12">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
+                <div>
+                    <h3 class="text-xl font-bold text-slate-800">Sonuç Önizleme</h3>
+                    <p class="text-sm text-slate-500">Tablonun son halini aşağıda görebilirsiniz. İlk 100 satır gösterilmektedir.</p>
+                </div>
+                <div class="flex gap-2">
+                    <div class="text-xs font-semibold bg-green-100 text-green-700 px-4 py-2 rounded-full flex items-center gap-1 border border-green-200">
+                        <span id="preview-match-count">0</span> Kayıt Güncellendi
+                    </div>
+                    <button id="download-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2 transition-colors shadow-md hover:shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Excel Dosyasını İndir
+                    </button>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto border border-slate-200 rounded-lg max-h-[500px] custom-scrollbar bg-slate-50">
+                <table class="w-full text-sm text-left text-slate-600 whitespace-nowrap">
+                    <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0 shadow-sm z-10 font-bold tracking-wider">
+                        <tr id="preview-header-row"></tr>
+                    </thead>
+                    <tbody id="preview-body" class="divide-y divide-slate-100 bg-white"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Bildirim -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2 text-sm pointer-events-none">
+        <span id="toast-icon">ℹ️</span>
+        <span id="toast-message">Mesaj</span>
+    </div>
+
+    <script>
+        // --- Durum Yönetimi (State) ---
+        const state = {
+            sourceFile: null,
+            targetFile: null,
+            sourceWB: null,
+            targetWB: null,
+            sourceData: [],
+            targetData: [],
+            processedResult: null
+        };
+
+        // --- DOM Elements ---
+        const dropZoneSource = document.getElementById('drop-zone-source');
+        const sourceInput = document.getElementById('sourceInput');
+        const dropZoneTarget = document.getElementById('drop-zone-target');
+        const targetInput = document.getElementById('targetInput');
+        const swapBtn = document.getElementById('swap-files-btn');
+        const exampleBtn = document.getElementById('example-btn');
+        const configPanel = document.getElementById('config-panel');
+        const processBtn = document.getElementById('process-btn');
+        
+        // Result Panel
+        const resultPanel = document.getElementById('result-panel');
+        const previewHeaderRow = document.getElementById('preview-header-row');
+        const previewBody = document.getElementById('preview-body');
+        const downloadBtn = document.getElementById('download-btn');
+        const previewMatchCount = document.getElementById('preview-match-count');
+        
+        // File Info UI
+        const sourceEmpty = document.getElementById('source-empty-state');
+        const sourceInfo = document.getElementById('source-file-info');
+        const sourceName = document.getElementById('source-filename');
+        const targetEmpty = document.getElementById('target-empty-state');
+        const targetInfo = document.getElementById('target-file-info');
+        const targetName = document.getElementById('target-filename');
+
+        // Selects
+        const sourceKeyCol = document.getElementById('source-key-col');
+        const targetKeyCol = document.getElementById('target-key-col');
+        const sourceValCols = document.getElementById('source-value-cols');
+        const targetDestCols = document.getElementById('target-dest-cols');
+        const exactMatch = document.getElementById('exact-match');
+        
+        // YENİ: Filters & Options
+        const filterSource = document.getElementById('filter-source');
+        const filterTarget = document.getElementById('filter-target');
+        const fixDatesCheckbox = document.getElementById('fix-dates');
+
+        // Previews
+        const sourcePreviewVal = document.getElementById('source-preview-val');
+        const targetPreviewVal = document.getElementById('target-preview-val');
+
+        // Validation UI
+        const colCountBadge = document.getElementById('col-count-badge');
+        const sourceCountSpan = document.getElementById('source-count');
+        const targetCountSpan = document.getElementById('target-count');
+        const mappingError = document.getElementById('mapping-error');
+
+        // --- Event Listeners ---
+
+        const setupDrag = (zone, input, handler) => {
+            zone.addEventListener('click', (e) => {
+                if(e.target.closest('button')) return;
+                input.click();
+            });
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-active'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-active'));
+            zone.addEventListener('drop', (e) => { 
+                e.preventDefault(); 
+                zone.classList.remove('drag-active'); 
+                if(e.dataTransfer.files.length) handler(e.dataTransfer.files[0]); 
+            });
+            input.addEventListener('change', (e) => { if(e.target.files.length) handler(e.target.files[0]); });
+        };
+
+        setupDrag(dropZoneSource, sourceInput, (f) => handleFile(f, 'source'));
+        setupDrag(dropZoneTarget, targetInput, (f) => handleFile(f, 'target'));
+
+        document.getElementById('remove-source').addEventListener('click', () => clearFile('source'));
+        document.getElementById('remove-target').addEventListener('click', () => clearFile('target'));
+
+        swapBtn.addEventListener('click', swapFiles);
+        sourceValCols.addEventListener('change', validateMapping);
+        targetDestCols.addEventListener('change', validateMapping);
+        processBtn.addEventListener('click', processData); 
+        downloadBtn.addEventListener('click', downloadExcel); 
+        exampleBtn.addEventListener('click', loadExampleData);
+        
+        sourceKeyCol.addEventListener('change', updatePreviews);
+        targetKeyCol.addEventListener('change', updatePreviews);
+
+        // YENİ: Filtreleme Listeners
+        filterSource.addEventListener('input', (e) => filterSelectOptions(e.target.value, sourceValCols));
+        filterTarget.addEventListener('input', (e) => filterSelectOptions(e.target.value, targetDestCols));
+
+        // --- Helper Functions ---
+
+        // Excel Date Serial to JS String (GG.AA.YYYY)
+        function formatExcelDate(serial) {
+            // Excel base date (roughly)
+            // 25569 is the offset for Unix epoch
+            // 86400 is seconds in a day
+            if (typeof serial !== 'number' || serial < 10000) return serial; // Basit bir kontrol, çok küçük sayıları tarih sanmasın
+            
+            const utc_days  = Math.floor(serial - 25569);
+            const utc_value = utc_days * 86400;                                        
+            const date_info = new Date(utc_value * 1000);
+
+            // JS Date'den string oluştur
+            const day = ("0" + date_info.getDate()).slice(-2);
+            const month = ("0" + (date_info.getMonth() + 1)).slice(-2);
+            const year = date_info.getFullYear();
+            
+            return `${day}.${month}.${year}`;
+        }
+
+        function filterSelectOptions(text, selectElement) {
+            const term = text.toLowerCase();
+            const options = Array.from(selectElement.options);
+            options.forEach(opt => {
+                const shouldShow = opt.text.toLowerCase().includes(term);
+                // display:none works in most browsers for options, but span wrapping is safer for cross-browser
+                // Here we simply toggle a hidden class or style
+                if (shouldShow) {
+                    opt.style.display = "";
+                } else {
+                    opt.style.display = "none";
+                }
+            });
+        }
+
+        function handleFile(file, type) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const wb = XLSX.read(data, {type: 'array'});
+                    const sheetName = wb.SheetNames[0];
+                    const sheet = wb.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ""});
+
+                    if (!jsonData || jsonData.length === 0) {
+                        showToast("Dosya boş veya okunamadı.", "⚠️");
+                        return;
+                    }
+
+                    if (type === 'source') {
+                        state.sourceFile = file;
+                        state.sourceWB = wb;
+                        state.sourceData = jsonData;
+                        updateFileUI('source', file.name);
+                    } else {
+                        state.targetFile = file;
+                        state.targetWB = wb;
+                        state.targetData = jsonData;
+                        updateFileUI('target', file.name);
+                    }
+
+                    checkConfigReady();
+                    resultPanel.classList.add('hidden');
+                } catch (err) {
+                    console.error(err);
+                    showToast("Dosya okuma hatası!", "❌");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function updateFileUI(type, name) {
+            if (type === 'source') {
+                sourceEmpty.classList.add('hidden');
+                sourceInfo.classList.remove('hidden');
+                sourceName.textContent = name;
+                dropZoneSource.classList.add('bg-blue-50/50', 'border-blue-400');
+            } else {
+                targetEmpty.classList.add('hidden');
+                targetInfo.classList.remove('hidden');
+                targetName.textContent = name;
+                dropZoneTarget.classList.add('bg-orange-50/50', 'border-orange-400');
+            }
+        }
+
+        function clearFile(type) {
+            if (type === 'source') {
+                state.sourceFile = null;
+                state.sourceData = [];
+                sourceInput.value = '';
+                sourceEmpty.classList.remove('hidden');
+                sourceInfo.classList.add('hidden');
+                dropZoneSource.classList.remove('bg-blue-50/50', 'border-blue-400');
+            } else {
+                state.targetFile = null;
+                state.targetData = [];
+                targetInput.value = '';
+                targetEmpty.classList.remove('hidden');
+                targetInfo.classList.add('hidden');
+                dropZoneTarget.classList.remove('bg-orange-50/50', 'border-orange-400');
+            }
+            configPanel.classList.add('hidden');
+            resultPanel.classList.add('hidden');
+        }
+
+        function swapFiles() {
+            const tempState = { ...state };
+            if (!state.sourceFile && !state.targetFile) return;
+
+            clearFile('source');
+            clearFile('target');
+
+            if (tempState.targetFile) {
+                state.sourceFile = tempState.targetFile;
+                state.sourceWB = tempState.targetWB;
+                state.sourceData = tempState.targetData;
+                updateFileUI('source', tempState.targetFile.name);
+            }
+            if (tempState.sourceFile) {
+                state.targetFile = tempState.sourceFile;
+                state.targetWB = tempState.sourceWB;
+                state.targetData = tempState.sourceData;
+                updateFileUI('target', tempState.sourceFile.name);
+            }
+            checkConfigReady();
+        }
+
+        // --- Configuration Logic ---
+
+        function checkConfigReady() {
+            if (state.sourceData.length > 0 && state.targetData.length > 0) {
+                populateConfigPanels();
+                configPanel.classList.remove('hidden');
+                setTimeout(() => configPanel.scrollIntoView({behavior: 'smooth'}), 100);
+            }
+        }
+
+        function populateConfigPanels() {
+            const sourceHeaders = state.sourceData[0];
+            const targetHeaders = state.targetData[0];
+
+            populateSelect(sourceKeyCol, sourceHeaders);
+            populateSelect(targetKeyCol, targetHeaders);
+            populateSelect(sourceValCols, sourceHeaders);
+            
+            targetDestCols.innerHTML = '';
+            targetHeaders.forEach((h, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = `Sütun ${XLSX.utils.encode_col(i)}: ${h}`;
+                targetDestCols.appendChild(opt);
+            });
+            for (let i = 0; i < 5; i++) {
+                const idx = targetHeaders.length + i;
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.textContent = `(+) Yeni Sütun ${XLSX.utils.encode_col(idx)}`;
+                opt.classList.add('text-green-600', 'font-medium');
+                targetDestCols.appendChild(opt);
+            }
+
+            autoSelectKey(sourceKeyCol, targetKeyCol);
+            updatePreviews();
+            
+            // Filtreleri temizle
+            filterSource.value = '';
+            filterTarget.value = '';
+            filterSelectOptions('', sourceValCols);
+            filterSelectOptions('', targetDestCols);
+        }
+
+        function populateSelect(element, headers) {
+            element.innerHTML = '';
+            headers.forEach((h, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = h ? h : `Sütun ${i+1}`;
+                element.appendChild(opt);
+            });
+        }
+
+        function autoSelectKey(sel1, sel2) {
+            const terms = ["id", "kod", "code", "no", "sku", "barkod"];
+            const opts1 = Array.from(sel1.options);
+            const opts2 = Array.from(sel2.options);
+
+            for (let term of terms) {
+                const idx1 = opts1.findIndex(o => o.text.toLowerCase().includes(term));
+                const idx2 = opts2.findIndex(o => o.text.toLowerCase().includes(term));
+                
+                if (idx1 !== -1 && idx2 !== -1) {
+                    sel1.selectedIndex = idx1;
+                    sel2.selectedIndex = idx2;
+                    return;
+                }
+            }
+        }
+
+        function updatePreviews() {
+            const sIdx = parseInt(sourceKeyCol.value);
+            if (!isNaN(sIdx) && state.sourceData.length > 1) {
+                const val = state.sourceData[1][sIdx];
+                sourcePreviewVal.textContent = val !== undefined ? val : "(Boş)";
+            } else {
+                sourcePreviewVal.textContent = "--";
+            }
+
+            const tIdx = parseInt(targetKeyCol.value);
+            if (!isNaN(tIdx) && state.targetData.length > 1) {
+                const val = state.targetData[1][tIdx];
+                targetPreviewVal.textContent = val !== undefined ? val : "(Boş)";
+            } else {
+                targetPreviewVal.textContent = "--";
+            }
+        }
+
+        function validateMapping() {
+            const sCount = sourceValCols.selectedOptions.length;
+            const tCount = targetDestCols.selectedOptions.length;
+
+            sourceCountSpan.textContent = sCount;
+            targetCountSpan.textContent = tCount;
+            
+            if (sCount > 0 || tCount > 0) {
+                colCountBadge.classList.remove('hidden');
+            } else {
+                colCountBadge.classList.add('hidden');
+            }
+
+            if (sCount !== tCount && sCount > 0) {
+                mappingError.classList.remove('hidden');
+                processBtn.disabled = true;
+                processBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                mappingError.classList.add('hidden');
+                processBtn.disabled = false;
+                processBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // --- Processing Logic ---
+
+        function processData() {
+            if (sourceValCols.selectedOptions.length === 0) {
+                showToast("Lütfen aktarılacak sütunları seçin.", "⚠️");
+                return;
+            }
+
+            const sKeyIdx = parseInt(sourceKeyCol.value);
+            const tKeyIdx = parseInt(targetKeyCol.value);
+            const exact = exactMatch.checked;
+            const shouldFixDates = fixDatesCheckbox.checked;
+
+            const sValIndices = Array.from(sourceValCols.selectedOptions).map(o => parseInt(o.value));
+            const tDestIndices = Array.from(targetDestCols.selectedOptions).map(o => parseInt(o.value));
+
+            // 1. Build Lookup Map
+            const lookupMap = new Map();
+            const sourceRows = state.sourceData;
+
+            for (let i = 1; i < sourceRows.length; i++) {
+                const row = sourceRows[i];
+                const keyVal = row[sKeyIdx];
+
+                if (keyVal !== undefined && keyVal !== null && keyVal !== "") {
+                    const key = String(keyVal).trim().toLowerCase();
+                    if (!lookupMap.has(key)) {
+                        // Verileri alırken tarih düzeltme yap
+                        const valuesToTransfer = sValIndices.map(idx => {
+                            let val = row[idx];
+                            if (shouldFixDates && typeof val === 'number') {
+                                // Basit bir heuristik: 20000 - 60000 arası sayılar muhtemelen Excel tarihidir
+                                if (val > 20000 && val < 60000) {
+                                    val = formatExcelDate(val);
+                                }
+                            }
+                            return val;
+                        });
+                        lookupMap.set(key, valuesToTransfer);
+                    }
+                }
+            }
+
+            // 2. Process Target Data
+            const newTargetData = JSON.parse(JSON.stringify(state.targetData)); 
+            let matchCount = 0;
+
+            for (let i = 1; i < newTargetData.length; i++) {
+                if (!newTargetData[i]) newTargetData[i] = [];
+                
+                const row = newTargetData[i];
+                const keyVal = row[tKeyIdx];
+                let foundVals = null;
+
+                if (keyVal !== undefined && keyVal !== null && keyVal !== "") {
+                    const key = String(keyVal).trim().toLowerCase();
+                    foundVals = lookupMap.get(key);
+                }
+
+                if (foundVals) {
+                    matchCount++;
+                    foundVals.forEach((val, index) => {
+                        const destColIdx = tDestIndices[index];
+                        while (row.length <= destColIdx) row.push("");
+                        row[destColIdx] = val;
+                    });
+                }
+            }
+
+            // 3. Update Headers
+            const sHeaders = state.sourceData[0];
+            const tHeaders = newTargetData[0];
+            
+            tDestIndices.forEach((destIdx, i) => {
+                if (!tHeaders[destIdx]) {
+                    while (tHeaders.length <= destIdx) tHeaders.push("");
+                    tHeaders[destIdx] = sHeaders[sValIndices[i]]; 
+                }
+            });
+
+            state.processedResult = newTargetData;
+            previewMatchCount.textContent = matchCount;
+            renderPreview(newTargetData);
+            resultPanel.classList.remove('hidden');
+            setTimeout(() => resultPanel.scrollIntoView({behavior: 'smooth'}), 100);
+            
+            showToast(`${matchCount} kayıt eşleşti.`, "✅");
+        }
+
+        function renderPreview(data) {
+            if (!data || data.length === 0) return;
+            previewHeaderRow.innerHTML = '';
+            previewBody.innerHTML = '';
+
+            const headers = data[0];
+            headers.forEach(h => {
+                const th = document.createElement('th');
+                th.className = "px-6 py-3 border-b border-slate-200 bg-slate-100";
+                th.textContent = h;
+                previewHeaderRow.appendChild(th);
+            });
+
+            const limit = Math.min(data.length, 101); 
+            for (let i = 1; i < limit; i++) {
+                const row = data[i];
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+                for (let j = 0; j < headers.length; j++) {
+                    const td = document.createElement('td');
+                    td.className = "px-6 py-3 border-b border-slate-100";
+                    td.textContent = (row[j] !== undefined && row[j] !== null) ? row[j] : "";
+                    tr.appendChild(td);
+                }
+                previewBody.appendChild(tr);
+            }
+        }
+
+        function downloadExcel() {
+            if (!state.processedResult) return;
+            const ws = XLSX.utils.aoa_to_sheet(state.processedResult);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Birlesmis_Veri");
+
+            let outName = "Sonuc.xlsx";
+            if (state.targetFile) {
+                outName = state.targetFile.name.replace(/\.[^/.]+$/, "") + "_Birlestirilmis.xlsx";
+            }
+            XLSX.writeFile(wb, outName);
+            showToast("Dosya indiriliyor...", "📥");
+        }
+
+        function showToast(msg, icon) {
+            document.getElementById('toast-message').textContent = msg;
+            document.getElementById('toast-icon').textContent = icon;
+            const t = document.getElementById('toast');
+            t.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+
+        function loadExampleData() {
+            const srcData = [
+                ["StokKodu", "ÜrünAdı", "Fiyat", "Tarih(Num)"],
+                ["SKU-001", "Laptop Pro", "25000", 44920],
+                ["SKU-002", "Mouse Wireless", "500", 44925],
+                ["SKU-003", "Klavye Mekanik", "1500", 44930]
+            ];
+            const tgtData = [
+                ["SiparişNo", "Müşteri", "İstenenKod", "SistemFiyatı", "TarihBilgisi"],
+                ["ORD-100", "Ahmet Y.", "SKU-001", "", ""],
+                ["ORD-101", "Ayşe K.", "SKU-003", "", ""],
+                ["ORD-102", "Mehmet T.", "SKU-999", "", ""]
+            ];
+
+            state.sourceData = srcData;
+            state.sourceFile = { name: "Urun_Listesi.xlsx" };
+            state.targetData = tgtData;
+            state.targetFile = { name: "Siparisler.xlsx" };
+
+            updateFileUI('source', "Urun_Listesi.xlsx (Örnek)");
+            updateFileUI('target', "Siparisler.xlsx (Örnek)");
+            
+            checkConfigReady();
+            
+            setTimeout(() => {
+                sourceKeyCol.selectedIndex = 0; 
+                targetKeyCol.selectedIndex = 2; 
+                updatePreviews();
+
+                // Fiyat ve Tarih Seç
+                sourceValCols.options[2].selected = true;
+                sourceValCols.options[3].selected = true;
+                
+                targetDestCols.options[3].selected = true;
+                targetDestCols.options[4].selected = true;
+                
+                validateMapping();
+                
+                showToast("Örnek veriler yüklendi.", "✨");
+            }, 500);
+        }
+    </script>
+</body>
+</html>
